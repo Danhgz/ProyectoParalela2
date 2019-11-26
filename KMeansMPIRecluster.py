@@ -60,14 +60,13 @@ def calcularProb(puntoEnX, centroides, psi, data):
     prob = (min / psi)
     return prob
 
-def probabilidadesPuntos1(data, centroides, psi, l, inicio, fin):
+def probabilidadesPuntos1(data, centroides, psi, l, m):
     probabilidades = []
     prob = 0.0
-    for i in range(inicio,fin):
+    for i in range(m):
         prob = l * calcularProb(data[i], centroides, psi, data)
         probabilidades.append(prob)
-    probabilidadesF = np.array(probabilidades)
-    return probabilidadesF
+    return probabilidades
 
 def probabilidadesPuntos2(data, centroidesF, centroidesIniciales, psi):
     probabilidades = []
@@ -75,8 +74,7 @@ def probabilidadesPuntos2(data, centroidesF, centroidesIniciales, psi):
     for i in range(len(centroidesIniciales)):
         prob = calcularProb(data[centroidesIniciales[i]], centroidesF, psi, data)
         probabilidades.append(prob)
-    probabilidadesF = np.array(probabilidades)
-    return probabilidadesF
+    return probabilidades
 
 def reclusterKmeans2(my_data, centroides, n):
     centroidesP = []
@@ -102,39 +100,43 @@ def reclusterKmeans2(my_data, centroides, n):
 def initParalelo(my_data, k, m, n):
     centroides = []
     l = m // 2
-    posPrimerC = 0
+    fCosto = 0
+    centroides.append(0) # el inicial es el 0
+    l2 = l // size
+    probabilidades = []
     if pid == 0:
-        posPrimerC = random.randint(0, m) #genera un numero entero aleatorio entre 0 y m exclusivo
-    posPrimerC = comm.bcast(posPrimerC, 0)
-    centroides.append(posPrimerC)
-    fCosto = 0.0
-    vecsXproceso = m//size
-    inicio = (pid*vecsXproceso)
-    fin = inicio + vecsXproceso
-    for i in range(inicio,fin):
-        fCosto += calcDisMin(my_data[i], centroides, my_data)
-    fCosto = comm.allreduce(fCosto, op=MPI.SUM)
-    probabilidades = probabilidadesPuntos1(my_data, centroides, fCosto, l , inicio, fin)
-    l2 = l//size
+        for i in range(m):
+            fCosto += calcDisMin(my_data[i], centroides, my_data)
+        probabilidades = probabilidadesPuntos1(my_data, centroides, fCosto, l, m)
+    fCosto = comm.bcast(fCosto, 0)
+    probabilidades = comm.bcast(probabilidades, 0)
     contador = 0
-    for i in range(0,5):
-        probabilidades = probabilidadesPuntos1(my_data, centroides, fCosto, l , inicio, fin)
+
+    for i in range(5):
         while contador < l2:
             escoger = random.random()
             posicionR = random.randint(0, len(probabilidades)-1)
-            if escoger < probabilidades[posicionR] and centroides.count(posicionR) == 0:
+            if escoger < probabilidades[posicionR]: 
                 centroides.append(posicionR)
                 contador += 1
+        fCosto = 0
+        contador = 0
+        for i in range(m):
+            fCosto += calcDisMin(my_data[i], centroides, my_data)
+        probabilidades = probabilidadesPuntos1(my_data, centroides, fCosto, l, m)
 
     centroides = comm.gather(centroides, 0)
     centroidesAux = []
-    for i in range(size):
-        for j in range(l2):
-            centroidesAux.append(centroides[i][j])
-    centroidesAux = list(dict.fromkeys(centroidesAux))
+    centroidesFinales = []
+
     if pid == 0:
+        for i in range(size):
+            for j in range(l2):
+                centroidesAux.append(centroides[i][j])
+        centroidesAux = list(dict.fromkeys(centroidesAux))
         centroidesFinales = reclusterKmeans2(my_data, centroidesAux, n)
-    comm.bcast(centroidesFinales, 0)
+
+    centroidesFinales = comm.bcast(centroidesFinales, 0)
     return centroidesFinales
 
 def main (argv):
@@ -150,7 +152,7 @@ def main (argv):
     my_data = genfromtxt(arch, delimiter=',')
     print(my_data," ",m," ",n," ",e)
     centroides = initParalelo(my_data, k, m, n)
-    print(centroides)
+    pprint.pprint(centroides)
 
     return
 
