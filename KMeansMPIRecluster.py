@@ -22,7 +22,7 @@ def leer_consola(argv):
     n = ""
     e = ""
     try:
-        opts, args = getopt.getopt(argv,"h:a:k:m:n:e:")
+        opts, args = getopt.getopt(argv,"ha:k:m:n:e:")
     except getopt.GetoptError:
         print ('Kmeans||.py -a <archivo> -k <valor de k> -m <valor de C> -n <valor de N> -e <Valor de epsilon>')
         sys.exit(2)
@@ -53,10 +53,24 @@ def calcDisMin(puntoEnX, centroides, data):
             if aux < min:
                 min = aux
     return min
+    
+def calcDisPosMin(puntoEnX, centroides):
+    min = 0.0
+    aux = 0.0    
+    min = distance.sqeuclidean(puntoEnX, centroides[0])
+    pos = 0
+    if len(centroides) > 1 :
+        tam = len(centroides)
+        for i in range(1,tam):
+            aux = distance.sqeuclidean(puntoEnX,centroides[i])
+            if aux < min:
+                min = aux
+                pos = i
+    return min , pos
 
 def calcularProb(puntoEnX, centroides, psi, data):
     prob = 0.0
-    min = math.sqrt(calcDisMin(puntoEnX, centroides, data))
+    min = calcDisMin(puntoEnX, centroides, data)
     prob = (min / psi)
     return prob
 
@@ -139,55 +153,54 @@ def initParalelo(my_data, k, m, n):
     centroidesFinales = comm.bcast(centroidesFinales, 0)
     return centroidesFinales
 
-def promediarGrupo(vector<vector<double>>& vectorGrupo, vector<double>& vectorPromedio):
+def promediarGrupo(vectorGrupo, vectorPromedio, tamDato, vectorDatos):
 	tamGrupo = len(vectorGrupo)
-	tamDato = len(vectorPromedio)
 	anterior = vectorPromedio
 	cambio = 1
-    vectorPromedio.clear()
-	vectorPromedio.resize(tamDato)
-	for i in range(0,tamGrupo):
-		for j in range(0, tamDato):
-			vectorPromedio[j] += vectorGrupo[i][j]
-	for i in range(0,tamDato):
-		vectorPromedio[i] = vectorPromedio[i]//tamGrupo
-	if compararVectores(anterior, vectorPromedio): #Fijo esto se puede optimizar con una libreria!!
+    np.mean(vectorGrupo, axis = 0, out = vectorPromedio)        
+	if np.array_equal(anterior, vectorPromedio):
 		cambio = 0
 	return cambio
 
-def algoritmoLloyd(vector<vector<double>>& vectorDatos, vector<vector<double>>& vectorCentroides, puntosAsociadosC, m:int, k:int, eps:double) :
-	posMin = 0
+def algoritmoLloyd(vectorDatos, vectorCentroides, m:int,n:int, k:int, eps:double) :
+	puntosAsociadosC = []
+    puntosAsociadosC.resize((k,0))
+    posMin = 0
 	fCosto = 0.0
 	centroidesAlterados = 0
     vecsXproceso = m//size
     inicio = (pid*vecsXproceso)
     fin = inicio + vecsXproceso
-	for i in range(inicio,fin):##Cuando le codigo este listo tal vez esto sea innecesario
-		fCosto += calcDisMin(vectorDatos[i], vectorCentroides)
-		posMin = calcMinPos(vectorDatos[i], vectorCentroides)
-        puntosAsociadosC[posMin].append(i)	#FALTA VER COMO MANEJAR ESTO
-	fCosto = comm.allreduce(fCosto, op=MPI.SUM)
+	for i in range(inicio,fin):
+		aux, posMin = calcDisPosMin(vectorDatos[i], vectorCentroides)
+        fCosto += aux
+        puntosAsociadosC[posMin].append(vectorDatos[i])
+	puntosAsociadosC = comm.allgather(puntosAsociadosC) #deberia hacer que todos los procesos tengan los mismos elementos en los k grupos
+    fCosto = comm.allreduce(fCosto, op=MPI.SUM)
     fCostoPrime = fCosto
 	while True: #El equivalente a un do-while
 		fCosto = fCostoPrime
 		centroidesAlterados = 0
-		for i in range(0,len(puntosAsociadosC)):#IDEA: if pid < k: promediarGrupo[pid]
-			centroidesAlterados += promediarGrupo(puntosAsociadosC[i], vectorCentroides[i])
-        #centroidesAlterados = comm.allreduce(centroidesAlterados, op=MPI.SUM)    
+        gruposXproceso = k//size
+        inicio = (pid*gruposXproceso)
+        fin = inicio + gruposXproceso
+		for i in range(inicio,fin):
+			centroidesAlterados += promediarGrupo(puntosAsociadosC[i], vectorCentroides[i], n)
+        centroidesAlterados = comm.allreduce(centroidesAlterados, op=MPI.SUM)    
 		puntosAsociadosC.clear()
 		puntosAsociadosC.resize((k,0))
-		fCostoPrime = 0
+		fCostoPrime = 0.0
 		for i in range(inicio,fin):
-			fCostoPrime += calcDisMin(vectorDatos[i], vectorCentroides)
-			posMin = calcMinPos(vectorDatos[i], vectorCentroides)
-            puntosAsociadosC[posMin].append(i) #FALTA VER COMO MANEJAR ESTO
+			aux, posMin = calcDisPosMin(vectorDatos[i], vectorCentroides)
+            fCostoPrime += aux
+            puntosAsociadosC[posMin].append(vectorDatos[i]) #FALTA VER COMO MANEJAR ESTO
+        puntosAsociadosC = comm.allgather(puntosAsociadosC)
         fCostoPrime = comm.allreduce(fCostoPrime, op=MPI.SUM)
 	if ((fCosto - fCostoPrime) <= eps) or (centroidesAlterados == 0): #El equivalente a un do-while
         break
 	return fCostoPrime
 
 def main (argv):
-    print("aaa")
     arch = ""
     k = 0
     m = 0
@@ -197,10 +210,9 @@ def main (argv):
         arch, k, m, n, e = leer_consola(argv)
     arch, k, m, n, e = comm.bcast((arch,k, m, n, e), root = 0)
     my_data = genfromtxt(arch, delimiter=',')
-    print(my_data," ",m," ",n," ",e)
     centroides = initParalelo(my_data, k, m, n)
     pprint.pprint(centroides)
-
+    algoritmoLloyd(my_data, centroides, m, n, k, e)
     return
 
 if __name__ == "__main__":
