@@ -182,7 +182,7 @@ def algoritmoLloyd(vector<vector<double>>& vectorDatos, vector<vector<double>>& 
 			posMin = calcMinPos(vectorDatos[i], vectorCentroides)
             puntosAsociadosC[posMin].append(i) #FALTA VER COMO MANEJAR ESTO
         fCostoPrime = comm.allreduce(fCostoPrime, op=MPI.SUM)
-	if ((fCosto - fCostoPrime) <= eps) || (centroidesAlterados == 0): #El equivalente a un do-while
+	if ((fCosto - fCostoPrime) <= eps) or (centroidesAlterados == 0): #El equivalente a un do-while
         break
 	return fCostoPrime
 
