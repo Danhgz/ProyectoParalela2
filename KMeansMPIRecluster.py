@@ -2,6 +2,7 @@
 #LIBRERIAS
 import pprint
 import random
+import time
 import sys, getopt
 import math
 from mpi4py import MPI
@@ -198,7 +199,30 @@ def algoritmoLloyd(vectorDatos, vectorCentroides, m:int,n:int, k:int, eps:double
         fCostoPrime = comm.allreduce(fCostoPrime, op=MPI.SUM)
 	if ((fCosto - fCostoPrime) <= eps) or (centroidesAlterados == 0): #El equivalente a un do-while
         break
-	return fCostoPrime
+	return puntosAsociadosC, vectorCentroides, fCostoPrime
+
+def escribirResultados(vGrupos, centroides, n:int, tPared, fCosto) :
+    cantGrupos = len(vGrupos)
+	salida = open("salida.csv", "w+")
+	for i in range(0,cantGrupos) :
+		salida.write("Centroide:\n")
+		for j in range(0,n) :
+			salida.write("%f" % centroides[i][j])
+			if (j != n - 1) :
+				salida.write(", ")
+                
+		salida.write("\nDatos:\n")
+		for j in range(0,len(vGrupos[i])) :
+			for k in range(0,n) :
+				salida.write("%f" % vGrupos[i][j][k])
+				if (k != n - 1) :
+					salida.write(", ")
+			salida.write("\n")
+		salida.write("Elementos: %d\n\n" % len(vGrupos[i]))
+        
+	salida.write("Tiempo pared: %f   Funcion de Costo: %f"% (tPared,fCosto))
+	salida.close()
+    return
 
 def main (argv):
     arch = ""
@@ -210,9 +234,17 @@ def main (argv):
         arch, k, m, n, e = leer_consola(argv)
     arch, k, m, n, e = comm.bcast((arch,k, m, n, e), root = 0)
     my_data = genfromtxt(arch, delimiter=',')
+    start = time.time()
     centroides = initParalelo(my_data, k, m, n)
+    medio = time.time()
     pprint.pprint(centroides)
-    algoritmoLloyd(my_data, centroides, m, n, k, e)
+    medio2 = time.time()
+    vGrupos, vCentroides, fCosto = algoritmoLloyd(my_data, centroides, m, n, k, e)
+    end = time.time()
+    tPared = end-medio2 + medio - start
+    tPared = comm.reduce(tPared, 0, op= MPI.MAX)
+    if pid == 0 :
+        escribirResultados(vGrupos, vCentroides, n, fCosto, tPared)
     return
 
 if __name__ == "__main__":
