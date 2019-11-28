@@ -139,6 +139,53 @@ def initParalelo(my_data, k, m, n):
     centroidesFinales = comm.bcast(centroidesFinales, 0)
     return centroidesFinales
 
+def promediarGrupo(vector<vector<double>>& vectorGrupo, vector<double>& vectorPromedio):
+	tamGrupo = len(vectorGrupo)
+	tamDato = len(vectorPromedio)
+	anterior = vectorPromedio
+	cambio = 1
+    vectorPromedio.clear()
+	vectorPromedio.resize(tamDato)
+	for i in range(0,tamGrupo):
+		for j in range(0, tamDato):
+			vectorPromedio[j] += vectorGrupo[i][j]
+	for i in range(0,tamDato):
+		vectorPromedio[i] = vectorPromedio[i]//tamGrupo
+	if compararVectores(anterior, vectorPromedio): #Fijo esto se puede optimizar con una libreria!!
+		cambio = 0
+	return cambio
+
+def algoritmoLloyd(vector<vector<double>>& vectorDatos, vector<vector<double>>& vectorCentroides, puntosAsociadosC, m:int, k:int, eps:double) :
+	posMin = 0
+	fCosto = 0.0
+	centroidesAlterados = 0
+    vecsXproceso = m//size
+    inicio = (pid*vecsXproceso)
+    fin = inicio + vecsXproceso
+	for i in range(inicio,fin):##Cuando le codigo este listo tal vez esto sea innecesario
+		fCosto += calcDisMin(vectorDatos[i], vectorCentroides)
+		posMin = calcMinPos(vectorDatos[i], vectorCentroides)
+        puntosAsociadosC[posMin].append(i)	#FALTA VER COMO MANEJAR ESTO
+	fCosto = comm.allreduce(fCosto, op=MPI.SUM)
+    fCostoPrime = fCosto
+	while True: #El equivalente a un do-while
+		fCosto = fCostoPrime
+		centroidesAlterados = 0
+		for i in range(0,len(puntosAsociadosC)):#IDEA: if pid < k: promediarGrupo[pid]
+			centroidesAlterados += promediarGrupo(puntosAsociadosC[i], vectorCentroides[i])
+        #centroidesAlterados = comm.allreduce(centroidesAlterados, op=MPI.SUM)    
+		puntosAsociadosC.clear()
+		puntosAsociadosC.resize((k,0))
+		fCostoPrime = 0
+		for i in range(inicio,fin):
+			fCostoPrime += calcDisMin(vectorDatos[i], vectorCentroides)
+			posMin = calcMinPos(vectorDatos[i], vectorCentroides)
+            puntosAsociadosC[posMin].append(i) #FALTA VER COMO MANEJAR ESTO
+        fCostoPrime = comm.allreduce(fCostoPrime, op=MPI.SUM)
+	if ((fCosto - fCostoPrime) <= eps) || (centroidesAlterados == 0): #El equivalente a un do-while
+        break
+	return fCostoPrime
+
 def main (argv):
     print("aaa")
     arch = ""
