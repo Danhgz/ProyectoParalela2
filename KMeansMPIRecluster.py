@@ -161,7 +161,7 @@ def promediarGrupo(vectorGrupo, vectorPromedio, tamDato, vectorDatos):
     np.mean(vectorGrupo, axis = 0, out = vectorPromedio)        
 	if np.array_equal(anterior, vectorPromedio):
 		cambio = 0
-	return cambio
+	return cambio, vectorPromedio
 
 def algoritmoLloyd(vectorDatos, vectorCentroides, m:int,n:int, k:int, eps:double) :
 	puntosAsociadosC = []
@@ -176,7 +176,7 @@ def algoritmoLloyd(vectorDatos, vectorCentroides, m:int,n:int, k:int, eps:double
 		aux, posMin = calcDisPosMin(vectorDatos[i], vectorCentroides)
         fCosto += aux
         puntosAsociadosC[posMin].append(vectorDatos[i])
-	puntosAsociadosC = comm.allgather(puntosAsociadosC) #deberia hacer que todos los procesos tengan los mismos elementos en los k grupos
+	comm.allreduce(puntosAsociadosC, op= MPI.SUM)
     fCosto = comm.allreduce(fCosto, op=MPI.SUM)
     fCostoPrime = fCosto
 	while True: #El equivalente a un do-while
@@ -186,7 +186,7 @@ def algoritmoLloyd(vectorDatos, vectorCentroides, m:int,n:int, k:int, eps:double
         inicio = (pid*gruposXproceso)
         fin = inicio + gruposXproceso
 		for i in range(inicio,fin):
-			centroidesAlterados += promediarGrupo(puntosAsociadosC[i], vectorCentroides[i], n)
+			centroidesAlterados, vectorCentroides[i] += promediarGrupo(puntosAsociadosC[i], vectorCentroides[i], n)
         centroidesAlterados = comm.allreduce(centroidesAlterados, op=MPI.SUM)    
 		puntosAsociadosC.clear()
 		puntosAsociadosC.resize((k,0))
@@ -195,7 +195,7 @@ def algoritmoLloyd(vectorDatos, vectorCentroides, m:int,n:int, k:int, eps:double
 			aux, posMin = calcDisPosMin(vectorDatos[i], vectorCentroides)
             fCostoPrime += aux
             puntosAsociadosC[posMin].append(vectorDatos[i]) #FALTA VER COMO MANEJAR ESTO
-        puntosAsociadosC = comm.allgather(puntosAsociadosC)
+        puntosAsociadosC = comm.allreduce(puntosAsociadosC, op= MPI.SUM)
         fCostoPrime = comm.allreduce(fCostoPrime, op=MPI.SUM)
 	if ((fCosto - fCostoPrime) <= eps) or (centroidesAlterados == 0): #El equivalente a un do-while
         break
