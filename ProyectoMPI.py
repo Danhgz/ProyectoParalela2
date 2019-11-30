@@ -169,7 +169,6 @@ def promediarGrupo(vectorGrupo, vectorPromedio, tamDato):
 
 def algoritmoLloyd(vectorDatos, vectorCentroides, m:int,n:int, k:int, eps:float) :
     puntosAsociadosC = [[] for i in range(k)]
-    vectorCentroides.append(vectorDatos[3])
     posMin = 0
     fCosto = 0.0
     centroidesAlterados = 0
