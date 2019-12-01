@@ -85,38 +85,45 @@ def init(data, k,m,n):
         centroides.append(0)
     centroides = comm.bcast(centroides, 0)
     for i in range(ini,fin):
-        costo += math.sqrt(disMin(i,centroides,data))
+        costo += disMin(i,centroides,data)
     costo = comm.allreduce(costo, op = MPI.SUM)
+    #pprint.pprint("costo inicial " + str(costo))
     l1 = m // 2
     l = math.sqrt(tam)
 
-    for i in range(2):
+    for i in range(5):
         count = 0
         while count < l:
-            elegir = random.randint(0,m-1)
+            elegir = random.randint(ini,fin-1)
             prob = (l1 * disMin(elegir, centroides, data))/costo
             print(prob)
             azar = random.random()
-            if azar < prob:
+            if azar < prob and centroides.count(elegir) == 0:
+                pprint.pprint("ESCOGIOOO")
                 centroides.append(elegir)
                 count += 1
                 centroides = comm.gather(centroides, 0)
                 if pid == 0:
                     centroidesAux = np.array(centroides)
                     centroidesAux = centroidesAux.flatten()
-                    #centroidesAux = np.unique(centroidesAux)
+                    centroidesAux = np.unique(centroidesAux)
                     centroides = list(centroidesAux)
                     print(len(centroides))
                 centroides = comm.bcast(centroides,0)
                 costo = 0
-                for i in range(ini,fin):
-                    costo += math.sqrt(disMin(i,centroides,data))
-                costo = comm.allreduce(costo, op = MPI.SUM)
+                if pid == 0:
+                    for i in range(m):
+                        costo += disMin(i,centroides,data)
+                costo = comm.bcast(costo, 0)
+        #pprint.pprint("costo " + str(costo))
     if pid == 0:
-        print(centroides)
-        centroides = recluster(data, centroides, n)
-        for i in range(len(centroides)):
-            centroides[i] = data[centroides[i]]
+    #     # print(centroides)
+    #     centroides = np.array(centroides)
+    #     centroides = centroides.flatten()
+    #     centroides = list(centroides)
+       centroides = recluster(data, centroides, n)
+        # for i in range(len(centroides)):
+        #     centroides[i] = data[centroides[i]]
     return centroides, costo
 
 
@@ -133,7 +140,7 @@ def main (argv):
     my_data = genfromtxt(arch, delimiter=',')
     centroides, costo = init(my_data,k,m,n)
     if pid == 0:
-        print(centroides)
+        print(len(centroides))
         print(costo)
     return
 
