@@ -83,7 +83,7 @@ def init(data,k,m,n):
     if pid == 0: 
         centroides.append(random.randint(0, m-1))
     centroides = comm.bcast(centroides, 0)
-    l = k // 2
+    l = k // 3
     vecsXproceso = m // size
     inicio = pid * vecsXproceso
     fin = inicio + vecsXproceso
